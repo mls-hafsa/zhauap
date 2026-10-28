@@ -684,3 +684,21 @@ def get_stats():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
+
+
+import threading
+
+def start_telegram_bot():
+    try:
+        from telegram_bot import bot
+        print("🤖 Telegram-бот запускается в фоновом потоке…")
+        bot.infinity_polling()
+    except Exception as e:
+        print(f"⚠️ Не удалось запустить Telegram-бота: {e}")
+
+threading.Thread(target=start_telegram_bot, daemon=True).start()
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
