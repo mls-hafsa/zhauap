@@ -19,14 +19,19 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "zhauap_super_secret_key_2026")
 
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+IS_PRODUCTION = os.getenv("RENDER") is not None
+
+app.config["SESSION_COOKIE_SAMESITE"] = "None" if IS_PRODUCTION else "Lax"
 app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SECURE"] = False
+app.config["SESSION_COOKIE_SECURE"] = IS_PRODUCTION
 
 CORS(
     app,
     supports_credentials=True,
-    origins=re.compile(r"^http://(localhost|127\.0\.0\.1):\d+$"),
+    origins=[
+        re.compile(r"^http://(localhost|127\.0\.0\.1):\d+$"),
+        "https://zhauap.vercel.app",
+    ],
 )
 
 MONGO_URI = os.getenv("MONGO_URI")
@@ -678,12 +683,6 @@ def get_stats():
         "total_returns": 0,
         "pending_returns": 0,
     }), 200
-
-
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
 
 
 import threading
