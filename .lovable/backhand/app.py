@@ -17,7 +17,13 @@ from pymongo import MongoClient
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "zhauap_super_secret_key_2026")
+app.secret_key = os.getenv("FLASK_SECRET_KEY")
+if not app.secret_key:
+    raise RuntimeError(
+        "FLASK_SECRET_KEY не задан в переменных окружения! "
+        "Сгенерируй случайный ключ командой: python -c \"import secrets; print(secrets.token_hex(32))\" "
+        "и добавь его в Render -> Environment как FLASK_SECRET_KEY перед следующим деплоем."
+    )
 
 IS_PRODUCTION = os.getenv("RENDER") is not None
 
@@ -36,6 +42,7 @@ CORS(
 
 MONGO_URI = os.getenv("MONGO_URI")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET")
 BOT_USERNAME = os.getenv("BOT_USERNAME", "zhauapai_bot")
 TRIAL_DAYS = 14
 MANUAL_TIMEOUT_MINUTES = 10
@@ -106,7 +113,45 @@ def parse_csv_rows(file_storage):
 
 @app.route("/api/health", methods=["GET"])
 def health():
-    return jsonify({"ok": True, "api": "zhauap"}), 200
+    try:
+        from telegram_bot import bot_state
+        telegram_last_update_at = bot_state.get("last_update_at")
+    except Exception:
+        telegram_last_update_at = None
+    # telegram_last_update_at — когда бот последний раз реально получил
+    # апдейт от Telegram через webhook. null — это нормально, если клиенты
+    # давно не писали; это НЕ признак поломки само по себе.
+    return jsonify({
+        "ok": True,
+        "api": "zhauap",
+        "telegram_last_update_at": telegram_last_update_at,
+    }), 200
+
+
+@app.route("/api/telegram/webhook", methods=["POST"])
+def telegram_webhook():
+    """Telegram стучится сюда при каждом новом сообщении (вместо того чтобы
+    бот сам бесконечно опрашивал Telegram фоновым потоком). Это обычный
+    HTTP-запрос, поэтому он сам "будит" бесплатный сервис Render, если тот
+    уснул из-за простоя — в отличие от фонового потока, который вместе со
+    сном сервиса просто умирал."""
+    if TELEGRAM_WEBHOOK_SECRET:
+        header_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+        if header_secret != TELEGRAM_WEBHOOK_SECRET:
+            return jsonify({"error": "Forbidden"}), 403
+
+    try:
+        import telebot
+        from telegram_bot import bot, process_webhook_update
+        update = telebot.types.Update.de_json(request.get_json(force=True, silent=True))
+        if update is not None:
+            process_webhook_update(update)
+    except Exception as e:
+        # Не роняем вебхук целиком из-за одного плохого апдейта — Telegram
+        # просто повторит попытку позже, если мы ответим не 200.
+        print(f"❌ Ошибка обработки Telegram-апдейта: {type(e).__name__}: {e}")
+
+    return jsonify({"ok": True}), 200
 
 
 @app.route("/api/register", methods=["POST"])
@@ -685,17 +730,41 @@ def get_stats():
     }), 200
 
 
-import threading
+def configure_telegram_webhook():
+    """Регистрирует вебхук в Telegram при запуске backend на Render, чтобы
+    Telegram слал сообщения на /api/telegram/webhook вместо того, чтобы бот
+    сам бесконечно опрашивал Telegram фоновым потоком (который умирал,
+    когда бесплатный сервис Render засыпал от простоя).
 
-def start_telegram_bot():
+    Безопасно вызывать при каждом старте — Telegram просто подтверждает тот
+    же адрес повторно. На локальном запуске (без RENDER_EXTERNAL_URL)
+    ничего не делает."""
+    base_url = os.getenv("RENDER_EXTERNAL_URL")
+    if not base_url or not TELEGRAM_TOKEN:
+        print("ℹ️ RENDER_EXTERNAL_URL или TELEGRAM_TOKEN не заданы — пропускаю настройку Telegram webhook "
+              "(это нормально при локальном запуске).")
+        return
+    webhook_url = f"{base_url.rstrip('/')}/api/telegram/webhook"
     try:
-        from telegram_bot import bot
-        print("🤖 Telegram-бот запускается в фоновом потоке…")
-        bot.infinity_polling()
+        resp = requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook",
+            json={
+                "url": webhook_url,
+                "secret_token": TELEGRAM_WEBHOOK_SECRET or "",
+                "drop_pending_updates": False,
+            },
+            timeout=10,
+        )
+        data = resp.json()
+        if data.get("ok"):
+            print(f"✅ Telegram webhook настроен: {webhook_url}")
+        else:
+            print(f"⚠️ Telegram отклонил setWebhook: {data.get('description')}")
     except Exception as e:
-        print(f"⚠️ Не удалось запустить Telegram-бота: {e}")
+        print(f"⚠️ Не удалось настроить Telegram webhook: {type(e).__name__}: {e}")
 
-threading.Thread(target=start_telegram_bot, daemon=True).start()
+
+configure_telegram_webhook()
 
 
 if __name__ == "__main__":

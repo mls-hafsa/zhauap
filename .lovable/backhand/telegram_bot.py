@@ -6,7 +6,9 @@ from dotenv import load_dotenv
 from datetime import datetime, timezone, timedelta
 import base64
 import json
+import random
 import re
+import time
 import uuid
 
 load_dotenv()
@@ -19,12 +21,16 @@ RECEIPTS_DIR = "receipts"
 os.makedirs(RECEIPTS_DIR, exist_ok=True)
 
 if not TOKEN:
-    print("❌ Ошибка: TELEGRAM_TOKEN не найден в файле .env!")
-    exit()
+    raise RuntimeError("TELEGRAM_TOKEN не найден в переменных окружения!")
 if not GEMINI_API_KEY:
     print("⚠️ Внимание: GEMINI_API_KEY не найден — ИИ-ответы работать не будут!")
 
 bot = telebot.TeleBot(TOKEN)
+
+# Общее состояние бота, видимое снаружи (например из /api/health в app.py).
+# Это обычный dict, а не просто переменная — так его изменения видны
+# другому модулю, который импортировал bot_state один раз.
+bot_state = {"last_update_at": None}
 
 try:
     client = MongoClient(MONGO_URI)
@@ -49,6 +55,11 @@ GEMINI_MODELS_FALLBACK = [
     "gemini-3.8-flash",
 
 ]
+
+# Сколько раз повторять запрос к ОДНОЙ и той же модели при временной ошибке
+# (таймаут, обрыв сети, 429/5xx), прежде чем перейти к следующей модели.
+GEMINI_MAX_RETRIES_PER_MODEL = 2
+GEMINI_BASE_BACKOFF_SECONDS = 1.5
 
 
 def get_user_company(telegram_id):
@@ -178,14 +189,46 @@ def ask_gemini(company_id, contact, prompt):
             f"https://generativelanguage.googleapis.com/v1beta/models/"
             f"{model_name}:generateContent?key={GEMINI_API_KEY}"
         )
-        try:
-            response = requests.post(url, headers=headers, json=data, timeout=20)
-            res_json = response.json()
-            if "error" in res_json:
-                print(f"⚠️ Модель {model_name}: {res_json['error']} — следующая…")
-                continue
 
-            raw_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
+        for attempt in range(1, GEMINI_MAX_RETRIES_PER_MODEL + 1):
+            is_last_attempt = attempt == GEMINI_MAX_RETRIES_PER_MODEL
+            try:
+                response = requests.post(url, headers=headers, json=data, timeout=20)
+            except requests.exceptions.RequestException as e:
+                # Сетевая ошибка/таймаут — временная проблема, имеет смысл повторить.
+                print(f"⚠️ Модель {model_name}, попытка {attempt}: сетевая ошибка {type(e).__name__} — "
+                      f"{'следующая модель' if is_last_attempt else 'повтор'}")
+                if not is_last_attempt:
+                    _gemini_sleep_with_backoff(attempt)
+                    continue
+                break  # к следующей модели
+
+            if response.status_code == 429 or response.status_code >= 500:
+                # Квота исчерпана или временная проблема на стороне Gemini — стоит повторить.
+                print(f"⚠️ Модель {model_name}, попытка {attempt}: HTTP {response.status_code} — "
+                      f"{'следующая модель' if is_last_attempt else 'повтор'}")
+                if not is_last_attempt:
+                    _gemini_sleep_with_backoff(attempt)
+                    continue
+                break  # к следующей модели
+
+            try:
+                res_json = response.json()
+            except ValueError:
+                print(f"⚠️ Модель {model_name}: ответ не в формате JSON (HTTP {response.status_code}) — следующая…")
+                break
+
+            if "error" in res_json:
+                # Ошибка вида "модель не найдена"/"неверный ключ" — постоянная, повторять бессмысленно.
+                print(f"⚠️ Модель {model_name}: {res_json['error']} — следующая…")
+                break
+
+            try:
+                raw_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
+            except (KeyError, IndexError, TypeError):
+                print(f"⚠️ Модель {model_name}: неожиданный формат ответа — следующая…")
+                break
+
             cleaned = re.sub(r"^```(?:json)?|```$", "", raw_text.strip(), flags=re.MULTILINE).strip()
 
             try:
@@ -216,11 +259,19 @@ def ask_gemini(company_id, contact, prompt):
                 "items": clean_items,
                 "wants_payment": bool(parsed.get("wants_payment")),
             }
-        except Exception as e:
-            print(f"⚠️ Ошибка {model_name}: {e} — следующая…")
-            continue
 
-    return {"reply": "Извините, сейчас все модели перегружены, попробуйте позже.", "items": [], "wants_payment": False}
+    return {
+        "reply": "Извините, сейчас не получается обработать ваш запрос — попробуйте написать ещё раз через пару минут.",
+        "items": [],
+        "wants_payment": False,
+    }
+
+
+def _gemini_sleep_with_backoff(attempt):
+    """Экспоненциальная задержка с джиттером перед повтором запроса к Gemini."""
+    delay = GEMINI_BASE_BACKOFF_SECONDS * (2 ** (attempt - 1))
+    delay += random.uniform(0, GEMINI_BASE_BACKOFF_SECONDS)
+    time.sleep(delay)
 
 
 def send_payment_info(chat_id, company_id):
@@ -359,6 +410,17 @@ def register_owner(message):
 
 @bot.message_handler(content_types=['photo'])
 def handle_photo_check(message):
+    try:
+        _handle_photo_check_inner(message)
+    except Exception as e:
+        print(f"❌ handle_photo_check упал: {type(e).__name__}: {e}")
+        try:
+            bot.reply_to(message, "Извините, сейчас не получается принять чек. Попробуйте отправить ещё раз через пару минут.")
+        except Exception as send_err:
+            print(f"❌ Не удалось отправить сообщение об ошибке клиенту: {send_err}")
+
+
+def _handle_photo_check_inner(message):
     telegram_id = message.from_user.id
     user_name = message.from_user.first_name or "Клиент"
     username = message.from_user.username or ""
@@ -379,7 +441,7 @@ def handle_photo_check(message):
         with open(os.path.join(RECEIPTS_DIR, local_filename), "wb") as f:
             f.write(file_bytes)
     except Exception as e:
-        print(f"⚠️ Не удалось заранее скачать чек: {e}")
+        print(f"⚠️ Не удалось заранее скачать чек: {type(e).__name__}")
 
     session = user_sessions_collection.find_one({"telegram_id": telegram_id})
     pending_items = (session.get("pending_items") if session else None) or []
@@ -414,6 +476,17 @@ def handle_photo_check(message):
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
+    try:
+        _handle_message_inner(message)
+    except Exception as e:
+        print(f"❌ handle_message упал: {type(e).__name__}: {e}")
+        try:
+            bot.reply_to(message, "Извините, сейчас временная проблема с обработкой сообщения. Попробуйте написать ещё раз через пару минут.")
+        except Exception as send_err:
+            print(f"❌ Не удалось отправить сообщение об ошибке клиенту: {send_err}")
+
+
+def _handle_message_inner(message):
     telegram_id = message.from_user.id
     user_name = message.from_user.first_name or "Клиент"
     username = message.from_user.username or ""
@@ -491,6 +564,19 @@ def handle_message(message):
     bot.reply_to(message, answer_text)
 
 
+def process_webhook_update(update):
+    """Вызывается из app.py при каждом входящем POST на /api/telegram/webhook.
+    В production это единственный способ, которым бот получает сообщения —
+    никакого фонового потока с бесконечным polling больше нет, поэтому бот
+    не "умирает" вместе с уснувшим на Render бесплатным сервисом: любой
+    входящий запрос (включая этот) сам "будит" сервис."""
+    bot_state["last_update_at"] = datetime.now(timezone.utc).isoformat()
+    bot.process_new_updates([update])
+
+
 if __name__ == "__main__":
-    print("🤖 Telegram-бот запущен (история + авто-возврат 10 мин + несколько товаров в чеке + перевод ответов)…")
+    # Запуск этого файла напрямую (python telegram_bot.py) — только для
+    # ручного локального теста логики бота через polling. В production
+    # (Render) используется webhook, см. app.py.
+    print("🤖 Telegram-бот запущен в режиме long polling (локальный тест)…")
     bot.infinity_polling()
