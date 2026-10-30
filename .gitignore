@@ -40,3 +40,6 @@ __pycache__/
 *.pyc
 receipts/
 .pytest_cache/
+
+# Сборка Vercel/Nitro
+.vercel

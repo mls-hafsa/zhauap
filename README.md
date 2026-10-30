@@ -1,41 +1,142 @@
-# Zhauap Client Connect
+# Zhauap
 
-Build a complete, polished, production-quality web app UI for "Zhauap" — an AI assistant that answers customer messages in messengers for small service businesses (beauty masters, studios, tutors) and brings back clients who went silent. All interface text in Russian. Use clearly labeled mock data only ("Демо-данные" badge in the header) — no real backend.
+AI-администратор клиентской поддержки для малого бизнеса. Клиенты пишут в Telegram-бота
+по персональной ссылке компании, AI отвечает строго по данным бизнеса (каталог, база знаний,
+профиль), сложные вопросы передаёт владельцу, а если владелец не ответил за 10 минут —
+продолжает диалог сам. Владелец работает в веб-кабинете.
 
-DESIGN: premium dark SaaS, near-black navy background (#090D16), ONE electric emerald accent (#10B981), rounded 16px cards, subtle borders, soft glow only on active elements. Readability first: high contrast, minimum 14px text, dark text on light buttons, status badges with icon + text in distinct colors (green "Бот ответил", orange "Нужен владелец", blue "Владелец ведёт", gray "Ждём ответа"). Font with full Cyrillic incl. Kazakh letters (ә ғ қ ң ө ұ ү һ і). Fully responsive; sidebar becomes bottom navigation on mobile. Include loading, empty and error states. Use standard safe Lucide React icons (e.g., MessageSquare, Send, Camera, Globe, Settings, Users, CreditCard, Shield, BarChart3, HelpCircle) to prevent build or import errors.
+## Архитектура
 
-PAGES (switchable via state or tabs in layout):
-1. Public landing page: hero, how it works (3 steps), features, pricing, FAQ, footer, buttons "Начать бесплатно" and "Войти".
-2. Auth: registration (name, email, password), login, "Забыл пароль" flow (enter email → "письмо отправлено" screen → set new password → success). Password rules shown live with checklist and strength meter: min 8 chars, uppercase, lowercase, digit, special character; show/hide toggle; confirm field.
-3. Onboarding wizard: business type, working hours, services and prices, tone of replies, connect channels.
-4. Channels page: cards for Telegram (connected, bot token field), WhatsApp (status "Скоро", tooltip about the 24-hour window and paid templates), Instagram ("Скоро").
-5. Unified inbox: tabs by channel (Все / Telegram / WhatsApp / Instagram) with unread counters, channel icon on EVERY conversation, status filters, search.
-6. Conversation page: channel badge, bubbles (client left, bot center labeled "Бот", owner right), highlighted AI draft card with "Отправить" / "Изменить", big "Перехватить" button, "Бот включён / Пауза" toggle, client side panel (name, channel, history, notes, "Записать" button).
-7. Reminders (win-back): rules editor (delay before 1st and 2nd reminder, max 2, quiet hours, message templates), and a list of scheduled/sent/returned reminders.
-8. Knowledge base: services with price and duration, schedule, rules (prepayment, cancellation), file upload for a price list.
-9. Results: 4 stat cards, weekly bar chart, returned-clients ring chart, reminders list; every number labeled as demo.
-10. Billing: 3 plans with monthly/annual toggle (annual = 2 months free): Старт 2 900 ₸ (Telegram, 300 AI replies, take-over), Стандарт 6 900 ₸ "Популярный" (2 channels, 1 500 replies, up to 2 reminders, knowledge base, results counter), Премиум 14 900 ₸ (3 channels, 5 000 replies, waiting list, 3 staff, 30 WhatsApp reminders included). 14-day free trial. Usage meters (AI replies, reminders), upgrade modal, invoices list (mock).
-11. Settings: profile, language switch (Русский / Қазақша placeholder), notifications, security (change password), team members, delete account.
+| Часть | Технологии | Где | Деплой |
+| --- | --- | --- | --- |
+| Сайт и кабинет | React 19, TanStack Start/Router, React Query, Tailwind 4 | `src/` | Vercel |
+| API и бот | Python, Flask, gunicorn | `.lovable/backhand/` | Render |
+| База | MongoDB Atlas (`zhauap_database`) | — | Atlas |
+| AI | Gemini `generateContent`, JSON-ответ | `zhauap/integrations/gemini.py` | — |
+| Мессенджер | Telegram Bot API, webhook | `zhauap/integrations/telegram.py` | — |
 
-Keep components modular and clean, ensure no missing modules or invalid icon imports.
+```
+.lovable/backhand/
+  app.py                 точка входа: gunicorn app:app
+  telegram_bot.py        локальный запуск бота в режиме long polling
+  zhauap/
+    config.py            переменные окружения
+    db.py                коллекции и индексы MongoDB
+    security.py          сессии, CSRF, авторизация
+    integrations/        клиенты Telegram и Gemini
+    services/
+      assistant.py       обработка сообщений бота, чеки, возврат AI по таймеру
+      conversations.py   режим диалога бот/владелец, таймер, версии
+      ai.py              промпт и серверные проверки ответа AI
+      catalog.py         каталог, база знаний, импорт CSV
+      accounts.py        пароли, лимиты входа, одноразовые коды
+    routes/              HTTP API (auth, conversations, catalog, payments, settings, system)
+  tests/                 pytest
+src/
+  routes/                страницы (файловая маршрутизация TanStack)
+  components/zhauap/     экраны кабинета и лендинг
+  lib/                   API-клиент, запросы, типы, утилиты
+tests/                   тесты чистых функций frontend (node --test)
+```
 
-This project was built with [Lovable](https://lovable.dev).
+### Как связаны данные
 
-## Build with Lovable
+1. Регистрация создаёт документ в `users` с `company_id` (это и есть компания).
+2. Клиент открывает `t.me/<бот>?start=<company_id>` — в `user_sessions` запоминается его компания.
+3. Каждое сообщение сохраняется в `leads` с `company_id` и стабильным `telegram_id`
+   (`client_id = tg:<id>`), поэтому смена ника не раздваивает диалог.
+4. Режим диалога (`bot`/`manual`), таймер `resume_at` и `version` лежат в `conversations`.
+5. AI получает профиль бизнеса, каталог `services`, базу `knowledge_base` и историю
+   только этой компании.
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/77d739aa-ac95-48cb-ad54-19442a7f3b96).
+### Передача владельцу и таймер 10 минут
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+- AI сам ставит `needs_human`, если ответа нет в данных; клиент может попросить человека.
+- Диалог переходит в ручной режим, владельцу приходит уведомление в Telegram (если привязан)
+  и в колокольчик кабинета.
+- Владелец отвечает с сайта; каждый его ответ даёт ещё 10 минут.
+- Если клиент ждёт дольше 10 минут, AI отвечает на неотвеченные сообщения. Таймер хранится в
+  MongoDB и переживает перезапуск сервера; его обрабатывают фоновый поток, любой входящий запрос
+  и (рекомендуется) внешний планировщик `/api/internal/tick`.
+- AI не отправит устаревший ответ, если владелец успел вмешаться: проверяется `version` диалога.
 
-## Development
+## Локальный запуск
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+### Backend
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+cd .lovable/backhand
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+cp .env.example .env          # заполните значения
+python app.py                 # API на http://localhost:5000
 ```
+
+Без публичного адреса Telegram не может прислать webhook. Для проверки бота локально:
+
+```sh
+python telegram_bot.py        # long polling; снимает webhook у бота
+```
+
+После локального теста перезапустите сервис на Render — он заново зарегистрирует webhook.
+
+### Frontend
+
+```sh
+cp .env.example .env          # VITE_API_URL=http://localhost:5000
+npm install
+npm run dev                   # http://localhost:5173
+```
+
+## Тесты и проверки
+
+```sh
+npm run test:backend          # pytest: API, изоляция компаний, бот, AI, таймер, CSV, оплаты
+npm test                      # тесты чистых функций frontend
+npm run typecheck             # TypeScript
+npm run lint                  # ESLint + Prettier
+npm run build                 # продакшен-сборка
+```
+
+Backend-тесты используют mongomock и фейковые Telegram/Gemini — им не нужны ключи и сеть.
+
+## Деплой
+
+### Render (backend)
+
+Настройки сервиса (справочно — в `render.yaml`):
+
+- Root Directory: `.lovable/backhand`
+- Build Command: `pip install -r requirements.txt`
+- Start Command: `gunicorn app:app --workers 1 --threads 8 --timeout 120 --bind 0.0.0.0:$PORT`
+- Health Check Path: `/api/health`
+- Переменные окружения — см. `.lovable/backhand/.env.example`.
+
+При старте сервис сам регистрирует webhook `RENDER_EXTERNAL_URL/api/telegram/webhook`.
+Проверка: `GET /api/health` должен вернуть `db_ok: true`, `telegram_configured: true`,
+`gemini_configured: true`.
+
+**Планировщик для таймера (бесплатно).** Создайте задачу на cron-job.org или аналоге:
+`POST https://zhauap.onrender.com/api/internal/tick` раз в минуту с заголовком
+`X-Internal-Token: <INTERNAL_TICK_TOKEN>`. Он же не даёт бесплатному Render засыпать.
+
+### Vercel (frontend)
+
+- Переменная `VITE_API_URL=https://zhauap.onrender.com` (Production и Preview).
+- Сборка — как раньше (`npm run build`); на Vercel Nitro сам собирает серверную функцию,
+  которая отдаёт все страницы (`/login`, `/app/inbox` и т.д.).
+- Если домен сайта меняется, добавьте его в `FRONTEND_ORIGINS` на Render.
+
+## Переменные окружения
+
+Backend: см. `.lovable/backhand/.env.example`. Обязательные: `FLASK_SECRET_KEY`, `MONGO_URI`,
+`TELEGRAM_TOKEN`, `BOT_USERNAME`, `GEMINI_API_KEY`, `TELEGRAM_WEBHOOK_SECRET`.
+Рекомендуемые: `INTERNAL_TICK_TOKEN`, `FRONTEND_ORIGINS`.
+
+Frontend: `VITE_API_URL`.
+
+## Lovable
+
+Проект связан с [Lovable](https://lovable.dev/projects/77d739aa-ac95-48cb-ad54-19442a7f3b96):
+коммиты в связанную ветку синхронизируются в редактор. Не переписывайте опубликованную историю
+git (force push, rebase опубликованных коммитов).
