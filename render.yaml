@@ -1,0 +1,32 @@
+# Справочная конфигурация сервиса Render (Blueprint).
+# Если сервис уже создан вручную, сверьте с ней настройки в Render Dashboard:
+# Root Directory, Build Command, Start Command и Health Check Path.
+services:
+  - type: web
+    name: zhauap
+    runtime: python
+    rootDir: .lovable/backhand
+    buildCommand: pip install -r requirements.txt
+    # 1 процесс + 8 потоков: долгий ответ Gemini не блокирует остальные запросы.
+    startCommand: gunicorn app:app --workers 1 --threads 8 --timeout 120 --bind 0.0.0.0:$PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: FLASK_SECRET_KEY
+        sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: INTERNAL_TICK_TOKEN
+        sync: false
+      - key: BOT_USERNAME
+        value: zhauapai_bot
+      - key: FRONTEND_ORIGINS
+        value: https://zhauap.vercel.app
+      # Необязательно, для Preview-деплоев Vercel (с именем вашей команды):
+      # - key: FRONTEND_ORIGIN_REGEX
+      #   value: ^https://zhauap-[a-z0-9-]+-<команда>\.vercel\.app$

@@ -39,12 +39,7 @@ dist-ssr
 __pycache__/
 *.pyc
 receipts/
+.pytest_cache/
 
-# Python / secrets
-.env
-.lovable/.env
-.venv/
-.venv1/
-__pycache__/
-*.pyc
-receipts/
+# Сборка Vercel/Nitro
+.vercel

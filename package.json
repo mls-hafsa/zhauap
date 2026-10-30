@@ -9,7 +9,10 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test": "node --experimental-strip-types --no-warnings --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "test:backend": "cd .lovable/backhand && python -m pytest -q"
   },
   "overrides": {
     "rolldown": "1.2.1"
