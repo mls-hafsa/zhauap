@@ -39,12 +39,4 @@ dist-ssr
 __pycache__/
 *.pyc
 receipts/
-
-# Python / secrets
-.env
-.lovable/.env
-.venv/
-.venv1/
-__pycache__/
-*.pyc
-receipts/
+.pytest_cache/
