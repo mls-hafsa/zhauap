@@ -27,3 +27,6 @@ services:
         value: zhauapai_bot
       - key: FRONTEND_ORIGINS
         value: https://zhauap.vercel.app
+      # Необязательно, для Preview-деплоев Vercel (с именем вашей команды):
+      # - key: FRONTEND_ORIGIN_REGEX
+      #   value: ^https://zhauap-[a-z0-9-]+-<команда>\.vercel\.app$

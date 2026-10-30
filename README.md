@@ -116,16 +116,29 @@ Backend-тесты используют mongomock и фейковые Telegram/G
 Проверка: `GET /api/health` должен вернуть `db_ok: true`, `telegram_configured: true`,
 `gemini_configured: true`.
 
-**Планировщик для таймера (бесплатно).** Создайте задачу на cron-job.org или аналоге:
-`POST https://zhauap.onrender.com/api/internal/tick` раз в минуту с заголовком
-`X-Internal-Token: <INTERNAL_TICK_TOKEN>`. Он же не даёт бесплатному Render засыпать.
+**Таймер возврата AI.** Работает в три слоя, все бесплатные:
+
+1. Фоновый поток backend проверяет просроченные диалоги каждые 30 секунд. Он не зависит от
+   сообщений клиента: любое событие передачи владельцу — это входящий запрос, после которого
+   бесплатный Render не засыпает минимум 15 минут, то есть дольше 10-минутного таймера.
+2. GitHub Actions (`.github/workflows/zhauap-tick.yml`) раз в ~5 минут вызывает
+   `/api/internal/tick` — страховка после перезапусков. Нужно добавить секрет репозитория
+   `INTERNAL_TICK_TOKEN` (Settings → Secrets and variables → Actions).
+3. Для точности до минуты — задача на cron-job.org: `POST https://zhauap.onrender.com/api/internal/tick`
+   раз в минуту с заголовком `X-Internal-Token: <INTERNAL_TICK_TOKEN>`.
 
 ### Vercel (frontend)
 
-- Переменная `VITE_API_URL=https://zhauap.onrender.com` (Production и Preview).
+- `VITE_API_URL=/` — сайт ходит в API через прокси на своём домене (`src/routes/api/$.ts`).
+  Cookie сессии становится «своим», поэтому вход работает в Safari/iPhone и инкогнито Chrome.
+- `API_PROXY_TARGET=https://zhauap.onrender.com` — куда прокси пересылает `/api/*`
+  (это значение по умолчанию, переменную можно не задавать).
 - Сборка — как раньше (`npm run build`); на Vercel Nitro сам собирает серверную функцию,
-  которая отдаёт все страницы (`/login`, `/app/inbox` и т.д.).
-- Если домен сайта меняется, добавьте его в `FRONTEND_ORIGINS` на Render.
+  которая отдаёт все страницы (`/login`, `/app/inbox` и т.д.) и прокси `/api/*`.
+- Если домен сайта меняется, добавьте его в `FRONTEND_ORIGINS` на Render. Для Preview-деплоев —
+  `FRONTEND_ORIGIN_REGEX` с именем вашей команды Vercel.
+- Старый режим без прокси (`VITE_API_URL=https://zhauap.onrender.com`) тоже работает, но в Safari
+  вход не сохраняется.
 
 ## Переменные окружения
 
@@ -133,7 +146,7 @@ Backend: см. `.lovable/backhand/.env.example`. Обязательные: `FLAS
 `TELEGRAM_TOKEN`, `BOT_USERNAME`, `GEMINI_API_KEY`, `TELEGRAM_WEBHOOK_SECRET`.
 Рекомендуемые: `INTERNAL_TICK_TOKEN`, `FRONTEND_ORIGINS`.
 
-Frontend: `VITE_API_URL`.
+Frontend (Vercel): `VITE_API_URL=/`, при необходимости `API_PROXY_TARGET`.
 
 ## Lovable
 

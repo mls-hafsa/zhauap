@@ -53,6 +53,8 @@ def create_app(config=None, store=None, telegram=None, gemini=None, clock=None):
     app.json.ensure_ascii = False
 
     origins = list(config.frontend_origins)
+    if config.frontend_origin_regex is not None:
+        origins.append(config.frontend_origin_regex)
     if config.allow_localhost_origins:
         origins.append(LOCALHOST_ORIGIN_RE)
     CORS(app, supports_credentials=True, origins=origins)

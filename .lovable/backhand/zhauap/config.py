@@ -61,7 +61,11 @@ class Config:
         # и Telegram не начинал повторную доставку того же сообщения.
         self.gemini_deadline_seconds = _int(env, "GEMINI_DEADLINE_SECONDS", 35, minimum=5)
 
-        self.frontend_origins = _list(env, "FRONTEND_ORIGINS", DEFAULT_FRONTEND_ORIGINS)
+        self.frontend_origins = [o.rstrip("/") for o in _list(env, "FRONTEND_ORIGINS", DEFAULT_FRONTEND_ORIGINS)]
+        # Например ^https://zhauap-[a-z0-9-]+-<ваша-команда>\.vercel\.app$ для Preview-деплоев.
+        # Шаблон обязательно должен включать имя вашей команды Vercel.
+        regex = (env.get("FRONTEND_ORIGIN_REGEX") or "").strip()
+        self.frontend_origin_regex = re.compile(regex) if regex else None
         self.allow_localhost_origins = _bool(env, "ALLOW_LOCALHOST_ORIGINS", not self.is_production)
         # Пока frontend (Vercel) и API (Render) на разных доменах, cookie должен
         # быть SameSite=None. Если API проксируется через домен сайта, можно
@@ -86,6 +90,8 @@ class Config:
             return False
         origin = origin.rstrip("/")
         if origin in self.frontend_origins:
+            return True
+        if self.frontend_origin_regex and self.frontend_origin_regex.fullmatch(origin):
             return True
         return bool(self.allow_localhost_origins and LOCALHOST_ORIGIN_RE.match(origin))
 

@@ -1,10 +1,13 @@
 // Единый клиент для Flask API: cookie-сессия, разбор ошибок, понятные сообщения.
 
-const rawApiUrl = import.meta.env["VITE_API_URL"] as string | undefined;
+// VITE_API_URL:
+//   "/"                          — API через прокси на этом же домене (src/routes/api/$.ts);
+//                                  рекомендуется для production: работает в Safari/iPhone.
+//   "https://zhauap.onrender.com" — прямые запросы на другой домен (сторонний cookie).
+//   не задан                      — локальная разработка, http://localhost:5000.
+const rawApiUrl = (import.meta.env["VITE_API_URL"] as string | undefined)?.trim();
 export const API_URL =
-  rawApiUrl && rawApiUrl.trim() !== ""
-    ? rawApiUrl.trim().replace(/\/$/, "")
-    : "http://localhost:5000";
+  rawApiUrl === "/" ? "" : rawApiUrl ? rawApiUrl.replace(/\/$/, "") : "http://localhost:5000";
 
 export const UNAUTHORIZED_EVENT = "zhauap:unauthorized";
 

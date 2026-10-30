@@ -1,0 +1,46 @@
+# Внешний «будильник» для таймера возврата AI.
+#
+# Backend сам проверяет просроченные диалоги фоновым потоком каждые 30 секунд.
+# Этот workflow — страховка: раз в 5 минут вызывает /api/internal/tick, чтобы
+# диалоги вернулись к AI даже после перезапуска или «засыпания» бесплатного Render.
+#
+# Настройка (один раз):
+#   GitHub -> Settings -> Secrets and variables -> Actions:
+#     Secret   INTERNAL_TICK_TOKEN — то же значение, что в Render
+#     Variable ZHAUAP_API_URL      — необязательно, по умолчанию https://zhauap.onrender.com
+#
+# GitHub не гарантирует точное время запуска по расписанию (возможна задержка в
+# несколько минут). Для точности до минуты используйте cron-job.org (см. README).
+
+name: Zhauap timer tick
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: zhauap-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Call /api/internal/tick
+        env:
+          TOKEN: ${{ secrets.INTERNAL_TICK_TOKEN }}
+          API_URL: ${{ vars.ZHAUAP_API_URL || 'https://zhauap.onrender.com' }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::Секрет INTERNAL_TICK_TOKEN не задан — пропускаю."
+            exit 0
+          fi
+          # Бесплатный Render может просыпаться до минуты — даём время и повторы.
+          curl --fail-with-body --silent --show-error \
+            --retry 3 --retry-delay 20 --retry-all-errors --max-time 90 \
+            -X POST "$API_URL/api/internal/tick" \
+            -H "X-Internal-Token: $TOKEN"

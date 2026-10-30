@@ -115,3 +115,24 @@ def test_too_large_request(client, owner):
 def test_health(client):
     body = client.get("/api/health").get_json()
     assert body["ok"] is True and body["db_ok"] is True and body["telegram_configured"] is True
+
+
+def test_preview_origin_regex(store, telegram, gemini, tmp_path):
+    env = {"RENDER": "1", "FRONTEND_ORIGIN_REGEX": r"https://zhauap-[a-z0-9-]+-myteam\.vercel\.app"}
+    config = Config(env=env, testing=True, secret_key="s", receipts_dir=str(tmp_path))
+    app = create_app(config, store=store, telegram=telegram, gemini=gemini)
+    client = app.test_client()
+    client.environ_base["HTTP_ORIGIN"] = "https://zhauap-git-main-myteam.vercel.app"
+    assert client.post("/api/register", json={"email": "pv@example.com", "password": PASSWORD}).status_code == 201
+    client.environ_base["HTTP_ORIGIN"] = "https://zhauap-git-main-otherteam.vercel.app"
+    assert client.post("/api/logout").status_code == 403
+
+
+def test_proxied_requests_keep_client_ip_and_origin(client):
+    # Через прокси Vercel запрос приходит с Origin сайта и X-Forwarded-For клиента.
+    response = client.post(
+        "/api/login",
+        json={"email": "nobody@example.com", "password": "wrong1234"},
+        headers={"X-Forwarded-For": "203.0.113.7, 76.76.21.21"},
+    )
+    assert response.status_code == 401
