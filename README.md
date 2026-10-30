@@ -123,7 +123,9 @@ Backend-тесты используют mongomock и фейковые Telegram/G
    бесплатный Render не засыпает минимум 15 минут, то есть дольше 10-минутного таймера.
 2. GitHub Actions (`.github/workflows/zhauap-tick.yml`) раз в ~5 минут вызывает
    `/api/internal/tick` — страховка после перезапусков. Нужно добавить секрет репозитория
-   `INTERNAL_TICK_TOKEN` (Settings → Secrets and variables → Actions).
+   `INTERNAL_TICK_TOKEN` (Settings → Secrets and variables → Actions). GitHub запускает
+   workflow по расписанию только из основной ветки (`main`), поэтому этот слой начинает
+   работать после слияния; проверить можно вручную: Actions → Zhauap timer tick → Run workflow.
 3. Для точности до минуты — задача на cron-job.org: `POST https://zhauap.onrender.com/api/internal/tick`
    раз в минуту с заголовком `X-Internal-Token: <INTERNAL_TICK_TOKEN>`.
 

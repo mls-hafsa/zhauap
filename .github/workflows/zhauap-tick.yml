@@ -9,6 +9,7 @@
 #     Secret   INTERNAL_TICK_TOKEN — то же значение, что в Render
 #     Variable ZHAUAP_API_URL      — необязательно, по умолчанию https://zhauap.onrender.com
 #
+# По расписанию GitHub запускает workflow только из ветки по умолчанию (main).
 # GitHub не гарантирует точное время запуска по расписанию (возможна задержка в
 # несколько минут). Для точности до минуты используйте cron-job.org (см. README).
 
