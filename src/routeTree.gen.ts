@@ -10,33 +10,220 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppRouteImport } from './routes/app'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as AppIndexRouteImport } from './routes/app/index'
+import { Route as AppBillingRouteImport } from './routes/app/billing'
+import { Route as AppCatalogRouteImport } from './routes/app/catalog'
+import { Route as AppChannelsRouteImport } from './routes/app/channels'
+import { Route as AppKnowledgeRouteImport } from './routes/app/knowledge'
+import { Route as AppPaymentsRouteImport } from './routes/app/payments'
+import { Route as AppResultsRouteImport } from './routes/app/results'
+import { Route as AppSettingsRouteImport } from './routes/app/settings'
+import { Route as AppInboxIndexRouteImport } from './routes/app/inbox/index'
+import { Route as AppInboxKeyRouteImport } from './routes/app/inbox/$key'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppRoute = AppRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppBillingRoute = AppBillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCatalogRoute = AppCatalogRouteImport.update({
+  id: '/catalog',
+  path: '/catalog',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppChannelsRoute = AppChannelsRouteImport.update({
+  id: '/channels',
+  path: '/channels',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppKnowledgeRoute = AppKnowledgeRouteImport.update({
+  id: '/knowledge',
+  path: '/knowledge',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPaymentsRoute = AppPaymentsRouteImport.update({
+  id: '/payments',
+  path: '/payments',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppResultsRoute = AppResultsRouteImport.update({
+  id: '/results',
+  path: '/results',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppInboxIndexRoute = AppInboxIndexRouteImport.update({
+  id: '/inbox/',
+  path: '/inbox/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppInboxKeyRoute = AppInboxKeyRouteImport.update({
+  id: '/inbox/$key',
+  path: '/inbox/$key',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/app': typeof AppRouteWithChildren
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/login': typeof LoginRoute
+  '/onboarding': typeof OnboardingRoute
+  '/register': typeof RegisterRoute
+  '/app/billing': typeof AppBillingRoute
+  '/app/catalog': typeof AppCatalogRoute
+  '/app/channels': typeof AppChannelsRoute
+  '/app/knowledge': typeof AppKnowledgeRoute
+  '/app/payments': typeof AppPaymentsRoute
+  '/app/results': typeof AppResultsRoute
+  '/app/settings': typeof AppSettingsRoute
+  '/app/': typeof AppIndexRoute
+  '/app/inbox/$key': typeof AppInboxKeyRoute
+  '/app/inbox/': typeof AppInboxIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/login': typeof LoginRoute
+  '/onboarding': typeof OnboardingRoute
+  '/register': typeof RegisterRoute
+  '/app/billing': typeof AppBillingRoute
+  '/app/catalog': typeof AppCatalogRoute
+  '/app/channels': typeof AppChannelsRoute
+  '/app/knowledge': typeof AppKnowledgeRoute
+  '/app/payments': typeof AppPaymentsRoute
+  '/app/results': typeof AppResultsRoute
+  '/app/settings': typeof AppSettingsRoute
+  '/app': typeof AppIndexRoute
+  '/app/inbox/$key': typeof AppInboxKeyRoute
+  '/app/inbox': typeof AppInboxIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/app': typeof AppRouteWithChildren
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/login': typeof LoginRoute
+  '/onboarding': typeof OnboardingRoute
+  '/register': typeof RegisterRoute
+  '/app/billing': typeof AppBillingRoute
+  '/app/catalog': typeof AppCatalogRoute
+  '/app/channels': typeof AppChannelsRoute
+  '/app/knowledge': typeof AppKnowledgeRoute
+  '/app/payments': typeof AppPaymentsRoute
+  '/app/results': typeof AppResultsRoute
+  '/app/settings': typeof AppSettingsRoute
+  '/app/': typeof AppIndexRoute
+  '/app/inbox/$key': typeof AppInboxKeyRoute
+  '/app/inbox/': typeof AppInboxIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/app'
+    | '/forgot-password'
+    | '/login'
+    | '/onboarding'
+    | '/register'
+    | '/app/billing'
+    | '/app/catalog'
+    | '/app/channels'
+    | '/app/knowledge'
+    | '/app/payments'
+    | '/app/results'
+    | '/app/settings'
+    | '/app/'
+    | '/app/inbox/$key'
+    | '/app/inbox/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/forgot-password'
+    | '/login'
+    | '/onboarding'
+    | '/register'
+    | '/app/billing'
+    | '/app/catalog'
+    | '/app/channels'
+    | '/app/knowledge'
+    | '/app/payments'
+    | '/app/results'
+    | '/app/settings'
+    | '/app'
+    | '/app/inbox/$key'
+    | '/app/inbox'
+  id:
+    | '__root__'
+    | '/'
+    | '/app'
+    | '/forgot-password'
+    | '/login'
+    | '/onboarding'
+    | '/register'
+    | '/app/billing'
+    | '/app/catalog'
+    | '/app/channels'
+    | '/app/knowledge'
+    | '/app/payments'
+    | '/app/results'
+    | '/app/settings'
+    | '/app/'
+    | '/app/inbox/$key'
+    | '/app/inbox/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
+  LoginRoute: typeof LoginRoute
+  OnboardingRoute: typeof OnboardingRoute
+  RegisterRoute: typeof RegisterRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +235,149 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/': {
+      id: '/app/'
+      path: '/'
+      fullPath: '/app/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/billing': {
+      id: '/app/billing'
+      path: '/billing'
+      fullPath: '/app/billing'
+      preLoaderRoute: typeof AppBillingRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/catalog': {
+      id: '/app/catalog'
+      path: '/catalog'
+      fullPath: '/app/catalog'
+      preLoaderRoute: typeof AppCatalogRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/channels': {
+      id: '/app/channels'
+      path: '/channels'
+      fullPath: '/app/channels'
+      preLoaderRoute: typeof AppChannelsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/knowledge': {
+      id: '/app/knowledge'
+      path: '/knowledge'
+      fullPath: '/app/knowledge'
+      preLoaderRoute: typeof AppKnowledgeRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/payments': {
+      id: '/app/payments'
+      path: '/payments'
+      fullPath: '/app/payments'
+      preLoaderRoute: typeof AppPaymentsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/results': {
+      id: '/app/results'
+      path: '/results'
+      fullPath: '/app/results'
+      preLoaderRoute: typeof AppResultsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/settings': {
+      id: '/app/settings'
+      path: '/settings'
+      fullPath: '/app/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/inbox/': {
+      id: '/app/inbox/'
+      path: '/inbox'
+      fullPath: '/app/inbox/'
+      preLoaderRoute: typeof AppInboxIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/inbox/$key': {
+      id: '/app/inbox/$key'
+      path: '/inbox/$key'
+      fullPath: '/app/inbox/$key'
+      preLoaderRoute: typeof AppInboxKeyRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
+interface AppRouteChildren {
+  AppBillingRoute: typeof AppBillingRoute
+  AppCatalogRoute: typeof AppCatalogRoute
+  AppChannelsRoute: typeof AppChannelsRoute
+  AppKnowledgeRoute: typeof AppKnowledgeRoute
+  AppPaymentsRoute: typeof AppPaymentsRoute
+  AppResultsRoute: typeof AppResultsRoute
+  AppSettingsRoute: typeof AppSettingsRoute
+  AppIndexRoute: typeof AppIndexRoute
+  AppInboxKeyRoute: typeof AppInboxKeyRoute
+  AppInboxIndexRoute: typeof AppInboxIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppBillingRoute: AppBillingRoute,
+  AppCatalogRoute: AppCatalogRoute,
+  AppChannelsRoute: AppChannelsRoute,
+  AppKnowledgeRoute: AppKnowledgeRoute,
+  AppPaymentsRoute: AppPaymentsRoute,
+  AppResultsRoute: AppResultsRoute,
+  AppSettingsRoute: AppSettingsRoute,
+  AppIndexRoute: AppIndexRoute,
+  AppInboxKeyRoute: AppInboxKeyRoute,
+  AppInboxIndexRoute: AppInboxIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
+  ForgotPasswordRoute: ForgotPasswordRoute,
+  LoginRoute: LoginRoute,
+  OnboardingRoute: OnboardingRoute,
+  RegisterRoute: RegisterRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
