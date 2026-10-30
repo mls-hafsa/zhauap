@@ -88,20 +88,48 @@ def parse_stock(value):
     return None
 
 
-def price_amount(price):
-    """Числовое значение цены: '18 000 ₸' -> 18000, '1 500,50' -> 1500.5. None, если не число."""
-    if price is None:
-        return None
-    text = CURRENCY_RE.sub("", str(price)).replace(" ", " ").strip()
-    match = re.search(r"\d[\d\s]*(?:[.,]\d{1,2})?", text)
-    if not match:
-        return None
-    number = match.group(0).replace(" ", "").replace(",", ".")
+# Разделители разрядов в ценах: обычный пробел, неразрывный (U+00A0), узкий неразрывный (U+202F —
+# так пишет Excel/Numbers на Mac), тонкий (U+2009), цифровой (U+2007) и апостроф.
+GROUP_SEPARATORS = " \u00a0\u202f\u2009\u2007'’"
+_GROUP_CLASS = "[ \u00a0\u202f\u2009\u2007'’]"
+# Число в цене: «10 000», «10 000,50», «10.000», «10,000», «1.500,50», «10000», «1500.5».
+AMOUNT_PATTERN = (
+    r"\d{1,3}(?:" + _GROUP_CLASS + r"\d{3})+(?:[.,]\d{1,2})?"
+    r"|\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?"
+    r"|\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?"
+    r"|\d+(?:[.,]\d{1,2})?"
+)
+AMOUNT_RE = re.compile(AMOUNT_PATTERN)
+
+
+def amount_from_token(token):
+    """Число из найденного AMOUNT_RE фрагмента. Точка/запятая с тремя цифрами после — разделитель разрядов."""
+    text = str(token or "")
+    for ch in GROUP_SEPARATORS:
+        text = text.replace(ch, "")
+    if re.fullmatch(r"\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?", text):
+        text = text.replace(".", "").replace(",", ".")
+    elif re.fullmatch(r"\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?", text):
+        text = text.replace(",", "")
+    else:
+        text = text.replace(",", ".")
     try:
-        value = float(number)
+        value = float(text)
     except ValueError:
         return None
     return int(value) if value.is_integer() else value
+
+
+def price_amount(price):
+    """Числовое значение цены: '18 000 ₸' -> 18000, '10.000' -> 10000, '1 500,50' -> 1500.5.
+    None, если в строке нет числа."""
+    if price is None:
+        return None
+    text = CURRENCY_RE.sub("", str(price))
+    match = AMOUNT_RE.search(text)
+    if not match:
+        return None
+    return amount_from_token(match.group(0))
 
 
 def format_price(price):

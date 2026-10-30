@@ -19,7 +19,7 @@ from pymongo.errors import DuplicateKeyError
 from ..integrations.telegram import TelegramError
 from ..utils import as_utc, clip, is_valid_company_id, utcnow
 from .accounts import consume_owner_link_code
-from .ai import HISTORY_LIMIT, AIResult, generate_reply, kb_exact_answer, wants_human
+from .ai import CLIENT_HOLD_REPLY, HISTORY_LIMIT, AIResult, generate_reply, kb_exact_answer, wants_human
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +31,16 @@ TEXT_NEED_LINK = "Пожалуйста, откройте персональну�
 TEXT_BAD_LINK = "Ссылка недействительна. Попросите у компании актуальную ссылку на чат."
 TEXT_UNSUPPORTED = "Я пока понимаю только текстовые сообщения и фото или PDF чеков об оплате. Напишите, пожалуйста, текстом."
 TEXT_TEMP_ERROR = "Извините, сейчас временная проблема с обработкой сообщения. Попробуйте написать ещё раз через пару минут."
+# Служебные формулировки, которые могут быть только во внутренних уведомлениях владельцу.
+# Если такой текст вдруг оказался в сообщении клиенту (например, модель скопировала причину),
+# клиент получает нейтральное CLIENT_HOLD_REPLY.
+INTERNAL_MARKERS_RE = re.compile(
+    r"(AI назвал цену|Вопрос клиента требует проверки|needs_human|handoff|Причина:|"
+    r"Нужен ваш ответ|нужен\s+(ваш\s+)?ответ\s+владельц|Уведомление для владельца)",
+    re.IGNORECASE,
+)
+OWNER_NOTICE_HEADER = "🔒 Уведомление для владельца (клиент его не видит)"
+
 TEXT_CLIENT_HANDOFF = (
     "Хорошо, передаю ваш вопрос владельцу — он ответит здесь. "
     "Если он не сможет ответить в течение {minutes} минут, я продолжу помогать."
@@ -201,6 +211,7 @@ class Assistant:
                     f"💬 Клиент {self._label(ctx)} ждёт вашего ответа:\n«{clip(text, 300)}»\n\n"
                     f"Ответьте на сайте в разделе «Входящие». Если не ответите за "
                     f"{self.config.manual_timeout_minutes} мин, ответит AI.",
+                    client_id=ctx.telegram_id,
                 )
             return
 
@@ -237,15 +248,18 @@ class Assistant:
             return
 
         if result.needs_human:
-            self._send(ctx.chat_id, result.reply, ctx.message_id)
+            # Клиенту — только нейтральный текст. Причина и черновик AI — во «Входящих» и уведомлении владельцу.
+            client_text = self._client_safe(result.reply)
+            self._send(ctx.chat_id, client_text, ctx.message_id)
             self._save(
-                user, ctx, notes=text, ai_response=result.reply, answer_source=result.source, status="need",
-                answered=False, handoff=True, handoff_reason=result.handoff_reason,
+                user, ctx, notes=text, ai_response=client_text, answer_source=result.source, status="need",
+                answered=False, handoff=True, handoff_reason=result.handoff_reason, ai_draft=result.draft or None,
             )
             self.conversations.take_over(conv, "ai_handoff", handoff_reason=result.handoff_reason, awaiting=True)
-            self._notify_handoff(user, ctx, text, result.handoff_reason)
+            self._notify_handoff(user, ctx, text, result.handoff_reason, draft=result.draft)
             return
 
+        result.reply = self._client_safe(result.reply)
         sent = self._send(ctx.chat_id, result.reply, ctx.message_id)
         self._save(
             user, ctx, notes=text, ai_response=result.reply, answer_source=result.source, status="bot",
@@ -311,6 +325,7 @@ class Assistant:
             user,
             f"🧾 Новый чек на проверку\nКлиент: {self._label(ctx)}\nПокупка: {items_text}\n\n"
             "Подтвердите или отклоните его на сайте в разделе «Оплаты».",
+            client_id=ctx.telegram_id,
         )
 
     def _download_receipt(self, file_id, mime_type):
@@ -345,7 +360,9 @@ class Assistant:
                 log.warning("Не удалось отправить QR: %s", exc)
         if info:
             return self._send(chat_id, caption)
-        self._notify_owner(user, "⚠️ Клиент готов оплатить, но реквизиты не заполнены. Заполните их в «Настройках».")
+        self._notify_owner(
+            user, "⚠️ Клиент готов оплатить, но реквизиты не заполнены. Заполните их в «Настройках».", client_id=chat_id
+        )
         return self._send(chat_id, "Реквизиты для оплаты ещё не настроены. Владелец свяжется с вами, чтобы завершить заказ.")
 
     # =================== возвращение AI по таймеру ===================
@@ -422,6 +439,7 @@ class Assistant:
             username=last.get("username") or "",
             name=last.get("name") or "Клиент",
         )
+        result.reply = self._client_safe(result.reply)
         sent = self._send(ctx.chat_id, result.reply)
         self._save(
             user, ctx, notes=None, ai_response=result.reply, answer_source="ai", status="bot",
@@ -437,6 +455,7 @@ class Assistant:
             user,
             f"🤖 Вы не ответили клиенту {self._label(ctx)} за {self.config.manual_timeout_minutes} мин — "
             "AI продолжил диалог. Историю видно на сайте во «Входящих».",
+            client_id=telegram_id,
         )
         return True
 
@@ -501,18 +520,35 @@ class Assistant:
     def _label(self, ctx):
         return f"{ctx.name} (@{ctx.username})" if ctx.username else f"{ctx.name} (ID {ctx.telegram_id})"
 
-    def _notify_handoff(self, user, ctx, text, reason):
+    def _notify_handoff(self, user, ctx, text, reason, draft=""):
+        draft_line = f"\nAI хотел ответить: «{clip(draft, 300)}»" if draft else ""
         self._notify_owner(
             user,
-            f"🙋 Нужен ваш ответ клиенту {self._label(ctx)}\nПричина: {reason}\nСообщение: «{clip(text, 300)}»\n\n"
+            f"🙋 Нужен ваш ответ клиенту {self._label(ctx)}\nПричина: {reason}\nСообщение: «{clip(text, 300)}»"
+            f"{draft_line}\n\n"
             f"Ответьте на сайте во «Входящих». Если не ответите за {self.config.manual_timeout_minutes} мин, "
             "AI продолжит диалог сам.",
+            client_id=ctx.telegram_id,
         )
 
-    def _notify_owner(self, user, text):
+    def _client_safe(self, text):
+        """Последний рубеж: служебный текст для владельца не уходит клиенту."""
+        if text and INTERNAL_MARKERS_RE.search(text):
+            log.warning("В сообщении клиенту найден служебный текст — заменён на нейтральный ответ")
+            return CLIENT_HOLD_REPLY
+        return text
+
+    def _notify_owner(self, user, text, client_id=None):
+        """Уведомление только владельцу. Оно никогда не сохраняется в историю клиента.
+        Если владелец сам пишет боту как клиент (тестирует свой бот), уведомление о его же диалоге
+        в этот чат не отправляем — иначе оно смешается с ответами клиенту. Оно остаётся в колокольчике на сайте."""
         owner_id = (user or {}).get("owner_telegram_id")
-        if owner_id:
-            self._send(owner_id, text)
+        if not owner_id:
+            return
+        if client_id is not None and str(owner_id) == str(client_id):
+            log.info("Владелец пишет боту как клиент — уведомление о его диалоге в Telegram не отправлено")
+            return
+        self._send(owner_id, f"{OWNER_NOTICE_HEADER}\n{text}")
 
 
 def background_ticker(assistant, interval_seconds, stop_event):
